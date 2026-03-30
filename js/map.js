@@ -53,6 +53,9 @@ const MapModule = (() => {
         broyat: APP_CONFIG.SEUIL_BROYAT_ALERTE,
       };
     }
+    // Met à jour les seuils partagés pour que table.js en bénéficie aussi
+    SEUILS_ACTIFS.apport = _seuils.apport;
+    SEUILS_ACTIFS.broyat = _seuils.broyat;
 
     // Supprime les anciens marqueurs
     Object.values(_markers).forEach(({ marker }) => marker.remove());
