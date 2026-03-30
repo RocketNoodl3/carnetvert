@@ -20,6 +20,12 @@
     <a href="index.html" class="active">Carte & Bacs</a>
     <a href="stats.html">Statistiques</a>
   </nav>
+  <!-- Hamburger visible uniquement sur mobile -->
+  <button class="hamburger" id="hamburger" aria-label="Menu" aria-expanded="false">
+    <span class="hamburger__bar"></span>
+    <span class="hamburger__bar"></span>
+    <span class="hamburger__bar"></span>
+  </button>
   <div id="auth-login" style="display:flex">
     <div id="google-signin-btn"></div>
   </div>
@@ -29,6 +35,16 @@
     <button class="header__logout" onclick="Auth.logout()">Déconnexion</button>
   </div>
 </header>
+
+<!-- Menu mobile déroulant -->
+<nav class="mobile-menu" id="mobile-menu" role="navigation">
+  <a href="index.html">🗺️ Carte & Bacs</a>
+  <a href="stats.html">📊 Statistiques</a>
+  <hr style="border-color:rgba(255,255,255,.1);margin:.25rem 0">
+  <a href="#" onclick="Forms.openAddBacForm();closeMobileMenu()">+ Nouveau bac</a>
+  <a href="#" onclick="Forms.openReleveForm(null);closeMobileMenu()">📋 Nouveau relevé</a>
+  <a href="#" onclick="ExportModule.openExportModal();closeMobileMenu()">📥 Exporter Excel</a>
+</nav>
 
 <!-- Écran de connexion -->
 <div id="auth-screen" class="auth-screen">
@@ -53,8 +69,30 @@
   </div>
 </div>
 
-<!-- Bandeau alertes -->
+<!-- Bandeau alertes (desktop) -->
 <div id="alertes-bandeau" style="display:none"></div>
+
+<!-- FAB mobile — boutons flottants -->
+<div class="fab-container" id="fab-container">
+  <button class="fab" onclick="Forms.openReleveForm(null)">📋 Relevé</button>
+  <button class="fab fab--secondary" onclick="Forms.openAddBacForm()">+ Bac</button>
+  <button class="fab fab--secondary" id="fab-filtre">🔴 Alertes</button>
+  <button class="fab fab--secondary" id="fab-liste" onclick="toggleCardsView()">📦 Bacs</button>
+</div>
+
+<!-- Bottom sheet mobile — remplace les popups Leaflet -->
+<div class="bottom-sheet-overlay" id="bs-overlay" onclick="closeBottomSheet()"></div>
+<div class="bottom-sheet" id="bottom-sheet">
+  <div class="bottom-sheet__handle"></div>
+  <div id="bottom-sheet-content"></div>
+</div>
+
+<!-- Vue cards mobile — tableau adapté -->
+<div class="cards-view" id="cards-view">
+  <div id="cards-container">
+    <p style="color:var(--texte-doux);text-align:center;padding:2rem">Chargement…</p>
+  </div>
+</div>
 
 <!-- ═══════════════ TABLEAU ══════════════════════════════════════════════════ -->
 <section class="main-section">
@@ -123,7 +161,7 @@
 
       <div class="form__group">
         <label class="form__label" for="releve-date">Date *</label>
-        <input type="date" id="releve-date" name="releve-date" class="form__input" required>
+        <input type="datetime-local" id="releve-date" name="releve-date" class="form__input" required>
       </div>
 
       <div class="form__group">
@@ -306,11 +344,13 @@
     );
 
     Auth.onLogin(async (user) => {
-      // Affiche la nav et masque l'écran de connexion
       document.getElementById("main-nav").style.display = "flex";
       document.getElementById("auth-screen").style.display = "none";
 
       try {
+        // Charge les seuils en premier — ils sont utilisés par map.js et table.js
+        await initSeuils();
+
         MapModule.init();
         await Promise.all([
           MapModule.loadBacs(),
