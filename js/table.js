@@ -196,8 +196,8 @@ const TableModule = (() => {
       if (col.format && val !== "—") val = col.format(val);
 
       let cls = "table__td";
-      if (col.key === "hauteurApport" && parseInt(row.hauteurApport) <= APP_CONFIG.SEUIL_APPORT_ALERTE && hasReleves) cls += " table__td--alerte-apport";
-      if (col.key === "hauteurBroyat" && parseInt(row.hauteurBroyat) >= APP_CONFIG.SEUIL_BROYAT_ALERTE && hasReleves) cls += " table__td--alerte-broyat";
+      if (col.key === "hauteurApport" && parseInt(row.hauteurApport) >= APP_CONFIG.SEUIL_APPORT_ALERTE && hasReleves) cls += " table__td--alerte-apport";
+      if (col.key === "hauteurBroyat" && parseInt(row.hauteurBroyat) <= APP_CONFIG.SEUIL_BROYAT_ALERTE && hasReleves) cls += " table__td--alerte-broyat";
 
       return `<td class="${cls}">${val}</td>`;
     });
