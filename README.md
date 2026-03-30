@@ -2,7 +2,7 @@
 
 Gestion des bacs de compostage — 100 % gratuit, sans serveur.
 
-**Sécurité** : connexion Google obligatoire + liste blanche d'emails dans l'Apps Script.
+**Sécurité** : connexion Google + whitelist emails.
 Seuls les comptes Gmail explicitement autorisés peuvent accéder aux données.
 
 ---
