@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CompostTrack — Statistiques</title>
+  <meta name="theme-color" content="#1b4332">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ═══════════════ HEADER ═══════════════════════════════════════════════════ -->
+<header class="header">
+  <div class="header__logo">🌿 CompostTrack</div>
+  <nav class="header__nav" id="main-nav" style="display:none">
+    <a href="index.html">Carte & Bacs</a>
+    <a href="stats.html" class="active">Statistiques</a>
+  </nav>
+  <div id="auth-login" style="display:flex">
+    <div id="google-signin-btn"></div>
+  </div>
+  <div id="auth-user" style="display:none" class="header__user">
+    <img id="user-avatar" class="header__avatar" src="" alt="Avatar" style="display:none">
+    <span id="user-name" class="header__username"></span>
+    <button class="header__logout" onclick="Auth.logout()">Déconnexion</button>
+  </div>
+</header>
+
+<!-- Écran de connexion -->
+<div id="auth-screen" class="auth-screen">
+  <div class="auth-screen__icon">📊</div>
+  <h1 class="auth-screen__title">CompostTrack</h1>
+  <p class="auth-screen__subtitle">Connectez-vous avec votre compte Google autorisé.</p>
+  <div id="google-signin-btn-center" style="margin-top:1.5rem"></div>
+</div>
+
+<!-- Contenu principal -->
+<div id="app-content" style="display:none">
+
+<!-- ═══════════════ CONTENU ══════════════════════════════════════════════════ -->
+<div class="stats-page">
+
+  <!-- En-tête avec titre, filtre période et export -->
+  <div class="stats-header">
+    <h1 class="stats-page-title">📊 Statistiques des relevés</h1>
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+      <select id="stats-periode" class="stats-periode-select" aria-label="Période d'analyse">
+        <option value="semaine">Par semaine</option>
+        <option value="mois" selected>Par mois</option>
+        <option value="annee">Par année</option>
+      </select>
+      <!-- Export Excel depuis la page stats -->
+      <button class="btn btn--export" onclick="ExportModule.openExportModal()">
+        📥 Exporter Excel
+      </button>
+    </div>
+  </div>
+
+  <!-- ── KPI globaux ─────────────────────────────────────────────────────── -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-card__value" id="kpi-total-bacs">—</div>
+      <div class="kpi-card__label">Bacs suivis</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card__value" id="kpi-total-releves">—</div>
+      <div class="kpi-card__label">Relevés totaux</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card__value" id="kpi-moy-apport">—</div>
+      <div class="kpi-card__label">Apport moyen</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card__value" id="kpi-moy-broyat">—</div>
+      <div class="kpi-card__label">Broyat moyen</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card__value" id="kpi-moy-temp">—</div>
+      <div class="kpi-card__label">Temp. moyenne</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card__value" id="kpi-moy-qualite">—</div>
+      <div class="kpi-card__label">Note qualité</div>
+    </div>
+  </div>
+
+  <!-- ── Filtre sites ────────────────────────────────────────────────────── -->
+  <div class="stats-controls">
+    <div class="stats-controls__row">
+      <span class="stats-controls__title">Sites affichés dans les graphiques :</span>
+    </div>
+    <div id="stats-sites" class="stats-sites-grid">
+      <em style="color:var(--texte-doux);font-size:.85rem">Chargement…</em>
+    </div>
+  </div>
+
+  <!-- ── Graphiques ─────────────────────────────────────────────────────── -->
+  <div class="charts-grid">
+
+    <!-- 1. Taux de remplissage — pleine largeur -->
+    <div class="chart-card chart-card--full">
+      <canvas id="chart-remplissage"></canvas>
+    </div>
+
+    <!-- 2. Température -->
+    <div class="chart-card">
+      <canvas id="chart-temperature"></canvas>
+    </div>
+
+    <!-- 3. Note qualité par site -->
+    <div class="chart-card">
+      <canvas id="chart-qualite"></canvas>
+    </div>
+
+    <!-- 4. Fréquence des problèmes -->
+    <div class="chart-card">
+      <canvas id="chart-problemes"></canvas>
+    </div>
+
+    <!-- 5. Activité (nombre de relevés) -->
+    <div class="chart-card">
+      <canvas id="chart-activite"></canvas>
+    </div>
+
+  </div>
+</div><!-- /.stats-page -->
+
+
+<!-- ═══════════════ MODALE — Export Excel (identique à index.html) ══════════ -->
+<div id="modal-export" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-export-title">
+  <div class="modal__box">
+    <div class="modal__header">
+      <h2 class="modal__title" id="modal-export-title">📥 Exporter les relevés</h2>
+      <button class="modal__close" data-close-modal="modal-export" aria-label="Fermer">×</button>
+    </div>
+
+    <p class="export-info">
+      L'export génère un fichier <strong>.xlsx</strong> téléchargeable directement.
+      Il contient toutes les informations du bac, du relevé, les problèmes,
+      opérations et la note qualité.
+    </p>
+
+    <p class="export-section-title">📅 Période</p>
+    <div class="form__row" style="margin-bottom:.95rem">
+      <div class="form__group">
+        <label class="form__label" for="export-date-debut">Du</label>
+        <input type="date" id="export-date-debut" class="form__input">
+      </div>
+      <div class="form__group">
+        <label class="form__label" for="export-date-fin">Au</label>
+        <input type="date" id="export-date-fin" class="form__input">
+      </div>
+    </div>
+
+    <p class="export-section-title">🏡 Sites à inclure</p>
+    <div id="export-sites" class="checkbox-group" style="margin-bottom:1rem">
+      <em style="color:var(--texte-doux);font-size:.85rem">Chargement…</em>
+    </div>
+
+    <div class="form__actions">
+      <button class="btn btn--secondary" data-close-modal="modal-export">Annuler</button>
+      <button id="btn-export-go" class="btn btn--export" onclick="ExportModule.runExport()">
+        📥 Télécharger Excel
+      </button>
+    </div>
+  </div>
+</div>
+
+
+</div><!-- /#app-content -->
+
+<!-- ═══════════════ SCRIPTS ═══════════════════════════════════════════════════ -->
+<!-- Google Identity Services -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+<script src="js/config.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/stats.js"></script>
+<script src="js/export.js"></script>
+
+<script>
+  /** Point d'entrée — page statistiques */
+  initModalClose();
+
+  window.addEventListener("load", () => {
+    // Auth.init() gère : restauration sessionStorage, boutons GSI, One Tap
+    Auth.init();
+
+    Auth.onLogin(async () => {
+      try {
+        await StatsModule.init();
+
+      } catch (err) {
+        console.error("Erreur statistiques :", err);
+        document.querySelector(".stats-page")?.insertAdjacentHTML("afterbegin",
+          `<div style="background:#fde;padding:1rem;border-radius:8px;margin-bottom:1rem">
+            ⚠️ Impossible de charger les données. Vérifiez l'URL Apps Script dans js/config.js.
+          </div>`
+        );
+      }
+    });
+  });
+</script>
+
+</body>
+</html>
