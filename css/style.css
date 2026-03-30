@@ -481,3 +481,42 @@ button { cursor: pointer; font-family: inherit; }
 
 /* Valeur en alerte dans le popup */
 .popup__val--alerte { color: #c0392b; font-weight: 800; }
+
+/* ── Bandeau récapitulatif alertes ──────────────────────────────────────────── */
+#alertes-bandeau {
+  background: #fff8f0;
+  border-top: 3px solid var(--orange);
+  padding: .65rem 1rem;
+}
+
+.bandeau__titre {
+  font-size: .88rem; color: var(--texte-doux);
+  margin-bottom: .5rem;
+}
+
+.bandeau__liste {
+  display: flex; flex-wrap: wrap; gap: .4rem;
+}
+
+.bandeau__item {
+  display: inline-flex; align-items: center; gap: .4rem;
+  background: var(--blanc); border: 1px solid var(--bord);
+  border-radius: 999px; padding: .3rem .75rem;
+  font-size: .82rem; cursor: pointer; font-family: inherit;
+  transition: background var(--tr), box-shadow var(--tr);
+}
+.bandeau__item:hover {
+  background: var(--vert-pale);
+  box-shadow: var(--sh);
+}
+
+.bandeau__dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+  animation: legendPulse 1.6s ease-in-out infinite;
+}
+
+.bandeau__nom    { font-weight: 600; color: var(--texte); }
+.bandeau__detail { color: var(--texte-doux); font-size: .78rem; }
+
+/* Supprime le style urgence (plus utilisé) */
+.popup__alerte--urgence { display: none; }
