@@ -1,18 +1,22 @@
 /**
  * map.js — Carte interactive Leaflet
  * =====================================
- * Marqueurs colorés et animés selon les alertes :
- *   🟢 Vert        — état normal
- *   🟠 Orange pulsant — apport ≤ seuil
- *   🔵 Bleu pulsant   — broyat ≥ seuil
+ * Utilise calculerAlerte() de utils.js — source unique des règles d'alerte.
+ * Marqueurs animés selon le type d'alerte.
  */
 
 const MapModule = (() => {
 
   let _map          = null;
-  let _markers      = {};      // { bacId: { marker, alerte } }
-  let _seuils       = {};
-  let _filtreAlerte = false;   // true = affiche uniquement les bacs en alerte
+  let _markers      = {};
+  let _filtreAlerte = false;
+
+  const ALERTE_CONFIG = {
+    normal:  { color: "#2d6a4f", pulse: false, label: "Normal"            },
+    apport:  { color: "#e07b39", pulse: true,  label: "Apport trop plein" },
+    broyat:  { color: "#3a7abf", pulse: true,  label: "Manque de broyat"  },
+    inactif: { color: "#b8a000", pulse: true,  label: "Pas de relevé récent" },
+  };
 
   // ===========================================================================
   // Initialisation
@@ -23,53 +27,27 @@ const MapModule = (() => {
       center: APP_CONFIG.MAP_CENTER,
       zoom:   APP_CONFIG.MAP_ZOOM_DEFAULT,
     });
-
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
       maxZoom: 19,
     }).addTo(_map);
-
     _addLegend();
     _setupFiltreBtn();
   }
 
   async function loadBacs() {
-    const [bacs, derniersReleves, config] = await Promise.all([
+    const [bacs, derniersReleves] = await Promise.all([
       apiFetchBacs(),
       apiGetDerniersReleves(),
-      apiFetchConfig(),
     ]);
 
-    // Seuils depuis le Sheet ou valeurs par défaut
-    if (config.seuils?.length) {
-      const s = config.seuils[0];
-      _seuils = {
-        apport: parseFloat(s.seuilApport) || APP_CONFIG.SEUIL_APPORT_ALERTE,
-        broyat: parseFloat(s.seuilBroyat) || APP_CONFIG.SEUIL_BROYAT_ALERTE,
-      };
-    } else {
-      _seuils = {
-        apport: APP_CONFIG.SEUIL_APPORT_ALERTE,
-        broyat: APP_CONFIG.SEUIL_BROYAT_ALERTE,
-      };
-    }
-    // Met à jour les seuils partagés pour que table.js en bénéficie aussi
-    SEUILS_ACTIFS.apport = _seuils.apport;
-    SEUILS_ACTIFS.broyat = _seuils.broyat;
-
-    // Supprime les anciens marqueurs
     Object.values(_markers).forEach(({ marker }) => marker.remove());
     _markers = {};
 
     bacs.forEach(bac => _addMarker(bac, derniersReleves.get(bac.id)));
 
-    // Met à jour le badge d'alertes dans le header
     _updateBadge();
-
-    // Bandeau récapitulatif sous la carte
     _updateBandeau();
-
-    // Applique le filtre si actif
     _applyFiltre();
   }
 
@@ -82,73 +60,49 @@ const MapModule = (() => {
     const lng = parseFloat(bac.lng);
     if (isNaN(lat) || isNaN(lng)) return;
 
-    const alerte = _getAlerte(releve);
-    const icon   = _createIcon(alerte);
-    const marker = L.marker([lat, lng], { icon }).addTo(_map);
+    // Utilise la fonction unifiée de utils.js
+    const alerte = calculerAlerte(releve);
+    const marker = L.marker([lat, lng], { icon: _createIcon(alerte) }).addTo(_map);
 
-    marker.bindPopup(_buildPopup(bac, releve, alerte), {
-      maxWidth:  300,
-      className: "compost-popup",
-    });
+    const isMobile = () => window.innerWidth <= 768;
+
+    if (isMobile()) {
+      // Mobile : bottom sheet au lieu du popup Leaflet
+      marker.on("click", () => {
+        if (window.openBottomSheet) {
+          window.openBottomSheet(_buildPopup(bac, releve, alerte));
+        }
+      });
+    } else {
+      // Desktop : popup Leaflet classique
+      marker.bindPopup(_buildPopup(bac, releve, alerte), {
+        maxWidth: 300, className: "compost-popup",
+      });
+    }
 
     _markers[bac.id] = { marker, alerte, bac, releve };
   }
 
-  /**
-   * Détermine le type d'alerte d'un bac selon son dernier relevé.
-   * @returns "normal" | "apport" | "broyat" | "urgence"
-   */
-  function _getAlerte(releve) {
-    if (!releve) return "normal";
-
-    const apport = parseInt(releve.hauteurApport);
-    const broyat = parseInt(releve.hauteurBroyat);
-    // Alerte apport : bac trop plein (≥ seuil)
-    const alerteApport = !isNaN(apport) && apport >= _seuils.apport;
-    // Alerte broyat : manque de broyat (≤ seuil)
-    const alerteBroyat = !isNaN(broyat) && broyat <= _seuils.broyat;
-
-    if (alerteApport) return "apport";
-    if (alerteBroyat) return "broyat";
-    return "normal";
-  }
-
-  // Couleurs et config par type d'alerte
-  const ALERTE_CONFIG = {
-    normal: { color: "#2d6a4f", pulse: false, label: "Normal"          },
-    apport: { color: "#e07b39", pulse: true,  label: "Apport trop plein" },
-    broyat: { color: "#3a7abf", pulse: true,  label: "Manque de broyat" },
-  };
-
-  /**
-   * Crée une icône SVG avec animation de pulsation pour les alertes.
-   * L'animation CSS est injectée directement dans le SVG.
-   */
   function _createIcon(alerte) {
     const cfg   = ALERTE_CONFIG[alerte];
     const color = cfg.color;
-    const pulse = cfg.pulse;
-    const size  = pulse ? 34 : 28;   // Légèrement plus grand pour les alertes
+    const size  = cfg.pulse ? 34 : 28;
 
-    // Anneau de pulsation animé (visible seulement en mode alerte)
-    const pulseRing = pulse ? `
+    const pulseRing = cfg.pulse ? `
       <circle cx="14" cy="14" r="11" fill="none" stroke="${color}" stroke-width="2" opacity="0.6">
-        <animate attributeName="r"        from="10" to="20" dur="1.6s" repeatCount="indefinite"/>
-        <animate attributeName="opacity"  from="0.7" to="0"  dur="1.6s" repeatCount="indefinite"/>
+        <animate attributeName="r"       from="10" to="20" dur="1.6s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" from="0.7" to="0"  dur="1.6s" repeatCount="indefinite"/>
       </circle>` : "";
-
-    const inner = `<circle cx="14" cy="14" r="5.5" fill="rgba(255,255,255,0.9)"/>`;
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${Math.round(size*1.28)}" viewBox="0 0 28 36">
       ${pulseRing}
       <path d="M14 0C6.27 0 0 6.27 0 14c0 9.33 14 22 14 22S28 23.33 28 14C28 6.27 21.73 0 14 0z"
             fill="${color}" stroke="#fff" stroke-width="2"/>
-      ${inner}
+      <circle cx="14" cy="14" r="5.5" fill="rgba(255,255,255,0.9)"/>
     </svg>`;
 
     return L.divIcon({
-      html:        svg,
-      className:   "",
+      html: svg, className: "",
       iconSize:    [size, Math.round(size * 1.28)],
       iconAnchor:  [size / 2, Math.round(size * 1.28)],
       popupAnchor: [0, -Math.round(size * 1.28)],
@@ -157,16 +111,28 @@ const MapModule = (() => {
 
   function _buildPopup(bac, releve, alerte) {
     const cfg = ALERTE_CONFIG[alerte];
-
     const alerteBanner = alerte !== "normal"
-      ? `<div class="popup__alerte popup__alerte--${alerte}">⚠️ ${cfg.label}</div>`
-      : "";
+      ? `<div class="popup__alerte popup__alerte--${alerte}">⚠️ ${cfg.label}</div>` : "";
 
     if (!releve) {
       return `<div class="popup">
+        <div class="popup__alerte popup__alerte--inactif">⏰ Aucun relevé enregistré</div>
         <h3 class="popup__title">${bac.nom}</h3>
-        <p class="popup__empty">Aucun relevé enregistré</p>
         <button class="popup__btn" onclick="Forms.openReleveForm('${bac.id}')">+ Premier relevé</button>
+      </div>`;
+    }
+    // Alerte inactivité avec relevé existant mais trop ancien
+    if (alerte === "inactif") {
+      const alerteBannerInactif = `<div class="popup__alerte popup__alerte--inactif">⏰ Pas de relevé depuis plus de ${SEUILS_ACTIFS.joursSansReleve} jours</div>`;
+      const problemes  = parseJsonField(releve.problemes);
+      return `<div class="popup">
+        ${alerteBannerInactif}
+        <h3 class="popup__title">${bac.nom}</h3>
+        <p class="popup__date">Dernier relevé : <strong>${formatDate(releve.date)}</strong> — ${releve.agent || "—"}</p>
+        <div class="popup__actions">
+          <button class="popup__btn" onclick="Forms.openReleveForm('${bac.id}')">+ Relevé</button>
+          <button class="popup__btn popup__btn--secondary" onclick="Forms.openEditBacForm('${bac.id}')">✏️ Modifier</button>
+        </div>
       </div>`;
     }
 
@@ -178,11 +144,11 @@ const MapModule = (() => {
       <h3 class="popup__title">${bac.nom}</h3>
       <p class="popup__date">Relevé du <strong>${formatDate(releve.date)}</strong> — ${releve.agent || "—"}</p>
       <div class="popup__grid">
-        <span>🌡️ Température</span>  <strong>${releve.temperature ? releve.temperature + " °C" : "—"}</strong>
-        <span>📦 Bac apport</span>   <strong class="${alerte === "apport" ? "popup__val--alerte" : ""}">${releve.hauteurApport != null ? releve.hauteurApport + " %" : "—"}</strong>
-        <span>🪵 Bac broyat</span>   <strong class="${alerte === "broyat" ? "popup__val--alerte" : ""}">${releve.hauteurBroyat != null ? releve.hauteurBroyat + " %" : "—"}</strong>
-        <span>💧 Hygrométrie</span>  <strong>${releve.hygrometrie || "—"}</strong>
-        <span>⭐ Qualité</span>      <strong>${formatEtoiles(releve.qualiteCompostage)}</strong>
+        <span>🌡️ Température</span> <strong>${releve.temperature ? releve.temperature + " °C" : "—"}</strong>
+        <span>📦 Bac apport</span>  <strong class="${alerte === "apport" ? "popup__val--alerte" : ""}">${releve.hauteurApport != null ? releve.hauteurApport + " %" : "—"}</strong>
+        <span>🪵 Bac broyat</span>  <strong class="${alerte === "broyat" ? "popup__val--alerte" : ""}">${releve.hauteurBroyat != null ? releve.hauteurBroyat + " %" : "—"}</strong>
+        <span>💧 Hygrométrie</span> <strong>${releve.hygrometrie || "—"}</strong>
+        <span>⭐ Qualité</span>     <strong>${formatEtoiles(releve.qualiteCompostage)}</strong>
       </div>
       ${problemes.length  ? `<p class="popup__tags popup__tags--danger">⚠️ ${problemes.join(", ")}</p>` : ""}
       ${operations.length ? `<p class="popup__tags">✅ ${operations.join(", ")}</p>` : ""}
@@ -194,7 +160,7 @@ const MapModule = (() => {
   }
 
   // ===========================================================================
-  // Badge d'alertes dans le header
+  // Badge header
   // ===========================================================================
 
   function _updateBadge() {
@@ -202,46 +168,31 @@ const MapModule = (() => {
       .filter(({ alerte }) => alerte !== "normal").length;
 
     let badge = document.getElementById("alerte-badge");
-
-    if (nbAlertes === 0) {
-      if (badge) badge.remove();
-      return;
-    }
+    if (nbAlertes === 0) { if (badge) badge.remove(); return; }
 
     if (!badge) {
       badge = document.createElement("div");
       badge.id        = "alerte-badge";
       badge.className = "alerte-badge";
-      badge.title     = "Bacs nécessitant un passage";
-      // Insère dans le header à droite de la nav
       const nav = document.getElementById("main-nav");
       if (nav) nav.insertAdjacentElement("afterend", badge);
     }
 
-    badge.innerHTML = `⚠️ <strong>${nbAlertes}</strong> bac${nbAlertes > 1 ? "s" : ""} en alerte`;
+    badge.innerHTML    = `⚠️ <strong>${nbAlertes}</strong> bac${nbAlertes > 1 ? "s" : ""} en alerte`;
     badge.style.cursor = "pointer";
-    badge.onclick = () => {
-      // Active le filtre alertes
+    badge.onclick      = () => {
       if (!_filtreAlerte) {
         _filtreAlerte = true;
         const btn = document.getElementById("btn-filtre-alertes");
-        if (btn) {
-          btn.classList.add("map-btn--active");
-          btn.textContent = "Tous les bacs";
-        }
+        if (btn) { btn.classList.add("map-btn--active"); btn.textContent = "Tous les bacs"; }
         _applyFiltre();
       }
-      // Scroll vers la carte
       document.getElementById("map")?.scrollIntoView({ behavior: "smooth" });
     };
   }
 
   // ===========================================================================
-  // Filtre "Alertes seulement"
-  // ===========================================================================
-
-  // ===========================================================================
-  // Bandeau récapitulatif des alertes sous la carte
+  // Bandeau récapitulatif
   // ===========================================================================
 
   function _updateBandeau() {
@@ -250,31 +201,26 @@ const MapModule = (() => {
 
     const alertes = Object.values(_markers)
       .filter(({ alerte }) => alerte !== "normal")
-      .sort((a, b) => {
-        // Apport en premier, broyat ensuite
-        const ordre = { apport: 0, broyat: 1 };
-        return (ordre[a.alerte] ?? 9) - (ordre[b.alerte] ?? 9);
-      });
+      .sort((a, b) => (a.alerte === "apport" ? -1 : 1));
 
-    if (!alertes.length) {
-      container.style.display = "none";
-      return;
-    }
+    if (!alertes.length) { container.style.display = "none"; return; }
 
     container.style.display = "block";
-    const cfg = ALERTE_CONFIG;
-
     container.innerHTML = `
       <div class="bandeau__titre">
         ⚠️ <strong>${alertes.length} bac${alertes.length > 1 ? "s" : ""} nécessitant un passage</strong>
       </div>
       <div class="bandeau__liste">
         ${alertes.map(({ bac, alerte, releve }) => {
-          const c = cfg[alerte];
+          const c      = ALERTE_CONFIG[alerte];
           const detail = alerte === "apport"
             ? `Apport trop plein (${releve?.hauteurApport ?? "—"}%)`
-            : `Manque de broyat (${releve?.hauteurBroyat ?? "—"}%)`;
-          return `<button class="bandeau__item" data-bacid="${bac.id}" title="Centrer sur la carte">
+            : alerte === "broyat"
+            ? `Manque de broyat (${releve?.hauteurBroyat ?? "—"}%)`
+            : releve
+            ? `Dernier relevé : ${formatDate(releve.date)}`
+            : `Aucun relevé enregistré`;
+          return `<button class="bandeau__item" data-bacid="${bac.id}">
             <span class="bandeau__dot" style="background:${c.color}"></span>
             <span class="bandeau__nom">${bac.nom}</span>
             <span class="bandeau__detail">${detail}</span>
@@ -282,11 +228,14 @@ const MapModule = (() => {
         }).join("")}
       </div>`;
 
-    // Clic sur un item → centre la carte sur le bac
     container.querySelectorAll(".bandeau__item").forEach(btn =>
       btn.addEventListener("click", () => focusBac(btn.dataset.bacid))
     );
   }
+
+  // ===========================================================================
+  // Filtre alertes
+  // ===========================================================================
 
   function _setupFiltreBtn() {
     const btn = document.getElementById("btn-filtre-alertes");
@@ -301,11 +250,8 @@ const MapModule = (() => {
 
   function _applyFiltre() {
     Object.values(_markers).forEach(({ marker, alerte }) => {
-      if (_filtreAlerte && alerte === "normal") {
-        _map.removeLayer(marker);
-      } else {
-        marker.addTo(_map);
-      }
+      if (_filtreAlerte && alerte === "normal") _map.removeLayer(marker);
+      else marker.addTo(_map);
     });
   }
 
@@ -320,8 +266,7 @@ const MapModule = (() => {
       div.innerHTML = Object.entries(ALERTE_CONFIG).map(([, cfg]) => `
         <div class="map-legend__item">
           <span class="map-legend__dot${cfg.pulse ? " map-legend__dot--pulse" : ""}"
-                style="background:${cfg.color}"></span>
-          ${cfg.label}
+                style="background:${cfg.color}"></span>${cfg.label}
         </div>`).join("");
       return div;
     };
@@ -339,9 +284,7 @@ const MapModule = (() => {
     entry.marker.openPopup();
   }
 
-  async function refresh() {
-    await loadBacs();
-  }
+  async function refresh() { await loadBacs(); }
 
   return { init, loadBacs, focusBac, refresh };
 
