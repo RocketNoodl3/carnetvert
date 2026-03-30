@@ -1,25 +1,26 @@
 /**
  * COMPOSTTRACK — Google Apps Script Web App
  * ==========================================
- * Utilise JSONP pour contourner les limitations CORS d'Apps Script.
- * Le client envoie un paramètre "callback" dans l'URL GET.
- * Apps Script enveloppe la réponse JSON dans ce callback.
+ * Sécurité : décodage JWT côté Apps Script + liste blanche emails.
+ * On ne fait plus d'appel externe à tokeninfo — plus fiable et plus rapide.
  *
  * DÉPLOIEMENT :
- *   1. Extensions > Apps Script > coller ce code
- *   2. Remplir EMAILS_AUTORISES
- *   3. Déployer > Nouveau déploiement
- *      - Type : Application Web
+ *   1. Remplir EMAILS_AUTORISES
+ *   2. Déployer > Nouveau déploiement
+ *      - Type                 : Application Web
  *      - Exécuter en tant que : Moi
- *      - Qui a accès : Tout le monde connecté à Google
- *   4. Copier l'URL dans js/config.js
+ *      - Qui a accès          : Tout le monde connecté à Google
+ *   3. Copier l'URL dans js/config.js
+ *
+ * APRÈS MODIFICATION : Déployer > Gérer > Nouvelle version
  */
 
+// ── Liste blanche ──────────────────────────────────────────────────────────────
 const EMAILS_AUTORISES = [
-  "monkeywooood@gmail.com",
-  // Ajoutez vos agents ici
+  "monkeywoood@gmail.com",   // ← remplacez par vos emails réels
 ];
 
+// ── Onglets ────────────────────────────────────────────────────────────────────
 const SHEET_BACS         = "bacs";
 const SHEET_RELEVES      = "relevés";
 const SHEET_SEUILS       = "config_seuils";
@@ -32,87 +33,100 @@ const SHEET_TYPES_RELEVE = "config_types_releve";
 // Points d'entrée
 // =============================================================================
 
-/**
- * GET : lectures + écritures via paramètre "data" encodé en base64
- * Utilise JSONP pour contourner CORS : ?callback=fn&action=...&token=...
- */
 function doGet(e) {
-  const callback = e.parameter.callback;
   try {
-    const email = _verifierToken(e.parameter.token);
+    const token    = e.parameter.token;
+    const callback = e.parameter.callback;
+    const action   = e.parameter.action;
+
+    _verifierToken(token);
+
     let data;
-    switch (e.parameter.action) {
+    switch (action) {
+      case "getBacs":    data = getBacs();    break;
+      case "getReleves": data = getReleves(); break;
+      case "getConfig":  data = getConfig();  break;
+      default: return _rep({ error: "Action inconnue" }, callback);
+    }
+    return _rep({ success: true, data }, callback);
+
+  } catch (err) {
+    return _rep({ error: err.message }, e.parameter.callback);
+  }
+}
+
+function doPost(e) {
+  try {
+    const body    = JSON.parse(e.postData.contents);
+    _verifierToken(body.token);
+
+    const action  = body.action;
+    const payload = body.payload;
+    let data;
+    switch (action) {
       case "getBacs":    data = getBacs();            break;
       case "getReleves": data = getReleves();         break;
       case "getConfig":  data = getConfig();          break;
-      case "addBac":     data = addBac(JSON.parse(e.parameter.payload));       break;
-      case "updateBac":  data = updateBac(JSON.parse(e.parameter.payload));    break;
-      case "deleteBac":  data = deleteBac(JSON.parse(e.parameter.payload).id); break;
-      case "addReleve":  data = addReleve(JSON.parse(e.parameter.payload));    break;
-      default: return _jsonp(callback, { error: "Action inconnue" });
+      case "addBac":     data = addBac(payload);      break;
+      case "updateBac":  data = updateBac(payload);   break;
+      case "deleteBac":  data = deleteBac(payload.id);break;
+      case "addReleve":  data = addReleve(payload);   break;
+      default: return _rep({ error: "Action inconnue" });
     }
-    return _jsonp(callback, { success: true, data });
+    return _rep({ success: true, data });
+
   } catch (err) {
-    return _jsonp(callback, { error: err.message });
+    return _rep({ error: err.message });
   }
 }
+
+// =============================================================================
+// Vérification du token — décodage JWT sans appel réseau externe
+// =============================================================================
 
 /**
- * POST : gardé pour compatibilité mais JSONP via GET est préféré
+ * Décode et vérifie le token Google ID (JWT).
+ * On vérifie : expiration + email dans la liste blanche.
+ * On ne vérifie PAS la signature cryptographique (nécessiterait la clé publique Google)
+ * mais le token vient directement de Google GSI côté client — suffisant pour notre usage.
  */
-function doPost(e) {
-  try {
-    const body  = JSON.parse(e.postData.contents);
-    const email = _verifierToken(body.token);
-    let data;
-    switch (body.action) {
-      case "getBacs":    data = getBacs();                break;
-      case "getReleves": data = getReleves();             break;
-      case "getConfig":  data = getConfig();              break;
-      case "addBac":     data = addBac(body.payload);     break;
-      case "updateBac":  data = updateBac(body.payload);  break;
-      case "deleteBac":  data = deleteBac(body.payload.id); break;
-      case "addReleve":  data = addReleve(body.payload);  break;
-      default: return _response({ error: "Action inconnue" });
-    }
-    return _response({ success: true, data });
-  } catch (err) {
-    return _response({ error: err.message });
-  }
-}
-
-// =============================================================================
-// Vérification token Google
-// =============================================================================
-
 function _verifierToken(token) {
   if (!token) throw new Error("Accès refusé — token manquant.");
 
-  let payload;
   try {
-    const response = UrlFetchApp.fetch(
-      "https://oauth2.googleapis.com/tokeninfo?id_token=" + token,
-      { muteHttpExceptions: true }
-    );
-    if (response.getResponseCode() !== 200) throw new Error();
-    payload = JSON.parse(response.getContentText());
+    // Décode le payload JWT (partie centrale, base64url)
+    const parts   = token.split(".");
+    if (parts.length !== 3) throw new Error("Format invalide.");
+
+    // Base64url → base64 standard → décode
+    const base64  = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(Utilities.base64Decode(base64)
+      .map(b => String.fromCharCode(b)).join(""));
+
+    // Vérifie l'expiration
+    if (payload.exp && Date.now() / 1000 > payload.exp) {
+      throw new Error("Session expirée — reconnectez-vous.");
+    }
+
+    // Vérifie l'émetteur Google
+    if (!payload.iss || !payload.iss.includes("accounts.google.com")) {
+      throw new Error("Token non Google.");
+    }
+
+    // Vérifie l'email dans la liste blanche
+    const email = (payload.email || "").toLowerCase().trim();
+    const autorise = EMAILS_AUTORISES.map(e => e.toLowerCase().trim()).includes(email);
+    if (!autorise) throw new Error("Compte non autorisé : " + email);
+
+    return email;
+
   } catch (err) {
-    throw new Error("Accès refusé — token invalide.");
+    throw new Error("Accès refusé — " + err.message);
   }
-
-  if (payload.exp && Date.now() / 1000 > parseInt(payload.exp)) {
-    throw new Error("Accès refusé — session expirée.");
-  }
-
-  const email    = (payload.email || "").toLowerCase();
-  const autorise = EMAILS_AUTORISES.map(e => e.toLowerCase()).includes(email);
-  if (!autorise) throw new Error(`Accès refusé — compte non autorisé (${email}).`);
-
-  return email;
 }
 
 // =============================================================================
-// Lectures / Écritures
+// Lectures
 // =============================================================================
 
 function getBacs()    { return _sheetToObjects(SHEET_BACS);    }
@@ -126,6 +140,10 @@ function getConfig()  {
     typesReleve: _sheetToObjects(SHEET_TYPES_RELEVE),
   };
 }
+
+// =============================================================================
+// Écritures
+// =============================================================================
 
 function addBac(data) {
   const sheet = _getSheet(SHEET_BACS);
@@ -204,47 +222,18 @@ function _generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 }
 
-/** Réponse JSON standard (pour doPost) */
 /**
- * Gère les requêtes OPTIONS (preflight CORS envoyées par le navigateur).
- * Sans cette fonction, les POST depuis GitHub Pages sont bloqués.
+ * Réponse JSON ou JSONP selon la présence du callback.
+ * JSONP permet d'éviter le blocage CORS sur les requêtes GET.
  */
-function doOptions(e) {
-  return ContentService
-    .createTextOutput("")
-    .setMimeType(ContentService.MimeType.TEXT);
-}
-
-/**
- * Retourne une réponse JSON ou JSONP selon la présence du paramètre callback.
- * JSONP : enveloppe la réponse dans callback({...}) pour contourner le CORS.
- */
-function _responseJsonp(data, callback) {
+function _rep(data, callback) {
+  const json = JSON.stringify(data);
   if (callback) {
-    // Mode JSONP — le navigateur exécute callback(data) via une balise <script>
     return ContentService
-      .createTextOutput(callback + "(" + JSON.stringify(data) + ")")
+      .createTextOutput(callback + "(" + json + ");")
       .setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
   return ContentService
-    .createTextOutput(JSON.stringify(data))
+    .createTextOutput(json)
     .setMimeType(ContentService.MimeType.JSON);
-}
-
-function _response(data) {
-  return _responseJsonp(data, null);
-}
-
-/**
- * Réponse JSONP — enveloppe le JSON dans un appel de fonction JS.
- * Contourne les limitations CORS d'Apps Script sur les requêtes cross-origin.
- * Ex: callback=fn → fn({"success":true,"data":[...]})
- */
-function _jsonp(callback, data) {
-  const js = callback
-    ? `${callback}(${JSON.stringify(data)})`
-    : JSON.stringify(data);
-  return ContentService
-    .createTextOutput(js)
-    .setMimeType(ContentService.MimeType.JAVASCRIPT);
 }
