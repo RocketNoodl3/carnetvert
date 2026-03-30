@@ -186,17 +186,10 @@
 <script>
   /** Point d'entrée — page statistiques */
   window.addEventListener("load", () => {
+    // Auth.init() gère : restauration sessionStorage, boutons GSI, One Tap
     Auth.init();
 
-    google.accounts.id.renderButton(
-      document.getElementById("google-signin-btn-center"),
-      { theme: "filled_green", size: "large", text: "signin_with", locale: "fr" }
-    );
-
     Auth.onLogin(async () => {
-      document.getElementById("main-nav").style.display = "flex";
-      document.getElementById("auth-screen").style.display = "none";
-
       try {
         await StatsModule.init();
 
