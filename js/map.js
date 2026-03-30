@@ -5,7 +5,6 @@
  *   🟢 Vert        — état normal
  *   🟠 Orange pulsant — apport ≤ seuil
  *   🔵 Bleu pulsant   — broyat ≥ seuil
- *   🔴 Rouge pulsant  — apport ET broyat en alerte (urgence)
  */
 
 const MapModule = (() => {
@@ -64,6 +63,9 @@ const MapModule = (() => {
     // Met à jour le badge d'alertes dans le header
     _updateBadge();
 
+    // Bandeau récapitulatif sous la carte
+    _updateBandeau();
+
     // Applique le filtre si actif
     _applyFiltre();
   }
@@ -98,21 +100,21 @@ const MapModule = (() => {
 
     const apport = parseInt(releve.hauteurApport);
     const broyat = parseInt(releve.hauteurBroyat);
-    const alerteApport = !isNaN(apport) && apport <= _seuils.apport;
-    const alerteBroyat = !isNaN(broyat) && broyat >= _seuils.broyat;
+    // Alerte apport : bac trop plein (≥ seuil)
+    const alerteApport = !isNaN(apport) && apport >= _seuils.apport;
+    // Alerte broyat : manque de broyat (≤ seuil)
+    const alerteBroyat = !isNaN(broyat) && broyat <= _seuils.broyat;
 
-    if (alerteApport && alerteBroyat) return "urgence";
-    if (alerteApport)                 return "apport";
-    if (alerteBroyat)                 return "broyat";
+    if (alerteApport) return "apport";
+    if (alerteBroyat) return "broyat";
     return "normal";
   }
 
   // Couleurs et config par type d'alerte
   const ALERTE_CONFIG = {
-    normal:  { color: "#2d6a4f", pulse: false, label: "Normal"             },
-    apport:  { color: "#e07b39", pulse: true,  label: "Apport faible"      },
-    broyat:  { color: "#3a7abf", pulse: true,  label: "Broyat élevé"       },
-    urgence: { color: "#c0392b", pulse: true,  label: "⚠️ Passage urgent"  },
+    normal: { color: "#2d6a4f", pulse: false, label: "Normal"          },
+    apport: { color: "#e07b39", pulse: true,  label: "Apport trop plein" },
+    broyat: { color: "#3a7abf", pulse: true,  label: "Manque de broyat" },
   };
 
   /**
@@ -132,10 +134,7 @@ const MapModule = (() => {
         <animate attributeName="opacity"  from="0.7" to="0"  dur="1.6s" repeatCount="indefinite"/>
       </circle>` : "";
 
-    // Icône ⚠ pour urgence, cercle pour les autres
-    const inner = alerte === "urgence"
-      ? `<text x="14" y="19" text-anchor="middle" font-size="11" fill="${color}" font-weight="bold">!</text>`
-      : `<circle cx="14" cy="14" r="5.5" fill="rgba(255,255,255,0.9)"/>`;
+    const inner = `<circle cx="14" cy="14" r="5.5" fill="rgba(255,255,255,0.9)"/>`;
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${Math.round(size*1.28)}" viewBox="0 0 28 36">
       ${pulseRing}
@@ -157,7 +156,7 @@ const MapModule = (() => {
     const cfg = ALERTE_CONFIG[alerte];
 
     const alerteBanner = alerte !== "normal"
-      ? `<div class="popup__alerte popup__alerte--${alerte}">${cfg.label}</div>`
+      ? `<div class="popup__alerte popup__alerte--${alerte}">⚠️ ${cfg.label}</div>`
       : "";
 
     if (!releve) {
@@ -177,8 +176,8 @@ const MapModule = (() => {
       <p class="popup__date">Relevé du <strong>${formatDate(releve.date)}</strong> — ${releve.agent || "—"}</p>
       <div class="popup__grid">
         <span>🌡️ Température</span>  <strong>${releve.temperature ? releve.temperature + " °C" : "—"}</strong>
-        <span>📦 Bac apport</span>   <strong class="${alerte === "apport" || alerte === "urgence" ? "popup__val--alerte" : ""}">${releve.hauteurApport != null ? releve.hauteurApport + " %" : "—"}</strong>
-        <span>🪵 Bac broyat</span>   <strong class="${alerte === "broyat" || alerte === "urgence" ? "popup__val--alerte" : ""}">${releve.hauteurBroyat != null ? releve.hauteurBroyat + " %" : "—"}</strong>
+        <span>📦 Bac apport</span>   <strong class="${alerte === "apport" ? "popup__val--alerte" : ""}">${releve.hauteurApport != null ? releve.hauteurApport + " %" : "—"}</strong>
+        <span>🪵 Bac broyat</span>   <strong class="${alerte === "broyat" ? "popup__val--alerte" : ""}">${releve.hauteurBroyat != null ? releve.hauteurBroyat + " %" : "—"}</strong>
         <span>💧 Hygrométrie</span>  <strong>${releve.hygrometrie || "—"}</strong>
         <span>⭐ Qualité</span>      <strong>${formatEtoiles(releve.qualiteCompostage)}</strong>
       </div>
@@ -217,11 +216,74 @@ const MapModule = (() => {
     }
 
     badge.innerHTML = `⚠️ <strong>${nbAlertes}</strong> bac${nbAlertes > 1 ? "s" : ""} en alerte`;
+    badge.style.cursor = "pointer";
+    badge.onclick = () => {
+      // Active le filtre alertes
+      if (!_filtreAlerte) {
+        _filtreAlerte = true;
+        const btn = document.getElementById("btn-filtre-alertes");
+        if (btn) {
+          btn.classList.add("map-btn--active");
+          btn.textContent = "Tous les bacs";
+        }
+        _applyFiltre();
+      }
+      // Scroll vers la carte
+      document.getElementById("map")?.scrollIntoView({ behavior: "smooth" });
+    };
   }
 
   // ===========================================================================
   // Filtre "Alertes seulement"
   // ===========================================================================
+
+  // ===========================================================================
+  // Bandeau récapitulatif des alertes sous la carte
+  // ===========================================================================
+
+  function _updateBandeau() {
+    const container = document.getElementById("alertes-bandeau");
+    if (!container) return;
+
+    const alertes = Object.values(_markers)
+      .filter(({ alerte }) => alerte !== "normal")
+      .sort((a, b) => {
+        // Apport en premier, broyat ensuite
+        const ordre = { apport: 0, broyat: 1 };
+        return (ordre[a.alerte] ?? 9) - (ordre[b.alerte] ?? 9);
+      });
+
+    if (!alertes.length) {
+      container.style.display = "none";
+      return;
+    }
+
+    container.style.display = "block";
+    const cfg = ALERTE_CONFIG;
+
+    container.innerHTML = `
+      <div class="bandeau__titre">
+        ⚠️ <strong>${alertes.length} bac${alertes.length > 1 ? "s" : ""} nécessitant un passage</strong>
+      </div>
+      <div class="bandeau__liste">
+        ${alertes.map(({ bac, alerte, releve }) => {
+          const c = cfg[alerte];
+          const detail = alerte === "apport"
+            ? `Apport trop plein (${releve?.hauteurApport ?? "—"}%)`
+            : `Manque de broyat (${releve?.hauteurBroyat ?? "—"}%)`;
+          return `<button class="bandeau__item" data-bacid="${bac.id}" title="Centrer sur la carte">
+            <span class="bandeau__dot" style="background:${c.color}"></span>
+            <span class="bandeau__nom">${bac.nom}</span>
+            <span class="bandeau__detail">${detail}</span>
+          </button>`;
+        }).join("")}
+      </div>`;
+
+    // Clic sur un item → centre la carte sur le bac
+    container.querySelectorAll(".bandeau__item").forEach(btn =>
+      btn.addEventListener("click", () => focusBac(btn.dataset.bacid))
+    );
+  }
 
   function _setupFiltreBtn() {
     const btn = document.getElementById("btn-filtre-alertes");
