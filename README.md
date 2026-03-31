@@ -1,4 +1,4 @@
-# 🌿 CompostTrack — Guide de déploiement
+# 🌿 CarnetVert — Guide de déploiement
 
 Gestion des bacs de compostage — 100 % gratuit, sans serveur.
 
