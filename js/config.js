@@ -19,7 +19,7 @@ const APP_CONFIG = Object.freeze({
   GOOGLE_CLIENT_ID: "220426324353-rj9ba2fbmh2eiao69em8k1pifl08ikbb.apps.googleusercontent.com",
 
   // ── Carte Leaflet ────────────────────────────────────────────────────────────
-  MAP_CENTER:       [45.91524599265989, 3.8344004689808946],   // Coordonnées du centre de votre territoire
+  MAP_CENTER:       [45.3633304993826, 5.589996711730135],   // Coordonnées du centre de votre territoire
   MAP_ZOOM_DEFAULT: 12,
 
   // ── Seuils d'alerte par défaut ───────────────────────────────────────────────
