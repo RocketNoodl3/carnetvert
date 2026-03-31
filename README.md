@@ -103,7 +103,7 @@ MAP_CENTER: [45.75, 4.85],   // Centre de votre territoire
 
 ## Étape 5 — Héberger le site
 
-### GitHub Pages (recommandé, gratuit)
+### GitHub Pages
 1. Créez un dépôt GitHub public
 2. Déposez tous les fichiers du dossier `compostage/`
 3. Settings > Pages > Source : **main / root**
@@ -127,8 +127,7 @@ python3 -m http.server 8080
 ```javascript
 const EMAILS_AUTORISES = [
   "martin.dupont@gmail.com",
-  "sophie.bernard@gmail.com",
-  "directeur@mairie.fr",      // Comptes Gmail ou professionnels Google
+  "sophie.bernard@gmail.com",  // Comptes Gmail ou professionnels Google
 ];
 ```
 
@@ -140,8 +139,8 @@ const EMAILS_AUTORISES = [
 |---|---|
 | Quelqu'un trouve l'URL Apps Script | ✅ Token Google requis |
 | Compte Google non autorisé | ✅ Vérifié dans la liste blanche |
-| Token falsifié | ✅ Validé par l'API Google (impossible à contrefaire) |
-| Agent révoqué | ✅ Retirez son email, redéployez |
+| Token falsifié | ✅ Validé par l'API Google  |
+| Utilisateur révoqué | ✅ Retirez son email, redéployez |
 | Inspection du code JS | ✅ Aucune clé secrète visible |
 
 ---
