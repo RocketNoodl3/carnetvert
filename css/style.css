@@ -97,7 +97,9 @@ button { cursor: pointer; font-family: inherit; }
 
 /* ── Carte ──────────────────────────────────────────────────────────────────── */
 #map {
-  height: 55vh; min-height: 280px; width: 100%;
+  /* Plein écran — occupe tout l'espace sous le header */
+  height: calc(100vh - var(--header-h));
+  width: 100%;
   background: var(--vert-fond);
 }
 .relative { position: relative; }
@@ -106,7 +108,6 @@ button { cursor: pointer; font-family: inherit; }
   display: flex; flex-direction: column; gap: .4rem;
 }
 @media (min-width: 600px) {
-  #map { height: 60vh; }
   .map-controls { flex-direction: row; }
 }
 .map-btn {
