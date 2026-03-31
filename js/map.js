@@ -64,21 +64,9 @@ const MapModule = (() => {
     const alerte = calculerAlerte(releve);
     const marker = L.marker([lat, lng], { icon: _createIcon(alerte) }).addTo(_map);
 
-    const isMobile = () => window.innerWidth <= 768;
-
-    if (isMobile()) {
-      // Mobile : bottom sheet au lieu du popup Leaflet
-      marker.on("click", () => {
-        if (window.openBottomSheet) {
-          window.openBottomSheet(_buildPopup(bac, releve, alerte));
-        }
-      });
-    } else {
-      // Desktop : popup Leaflet classique
-      marker.bindPopup(_buildPopup(bac, releve, alerte), {
-        maxWidth: 300, className: "compost-popup",
-      });
-    }
+    marker.bindPopup(_buildPopup(bac, releve, alerte), {
+      maxWidth: 300, className: "compost-popup",
+    });
 
     _markers[bac.id] = { marker, alerte, bac, releve };
   }
