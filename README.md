@@ -81,7 +81,7 @@ Créez ces 7 onglets :
 
 ---
 
-## Étape 3 — Client ID Google (5 minutes, gratuit)
+## Étape 3 — Client ID Google
 
 Nécessaire pour afficher le bouton "Se connecter avec Google" sur le site.
 
