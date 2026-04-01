@@ -2,6 +2,14 @@
 
 Gestion des bacs de compostage — 100 % gratuit, sans serveur.
 
+**Fonctionnalités clés** :
+
+- Ajout et modification de bacs
+- Affichage cartographique avec alertes d'entretien
+- Saisie et consultation des relevés
+- Statistiques
+- Export Excel
+
 **Sécurité** : connexion Google + whitelist emails.
 Seuls les comptes Gmail explicitement autorisés peuvent accéder aux données.
 
