@@ -27,15 +27,8 @@ const ExportModule = (() => {
       const bacs = await apiFetchBacs();
       _fillSiteSelector(bacs);
 
-      // Dates par défaut : 1 an glissant
-      const today     = new Date();
-      const lastYear  = new Date(today);
-      lastYear.setFullYear(lastYear.getFullYear() - 1);
-
-      const elDebut = document.getElementById("export-date-debut");
-      const elFin   = document.getElementById("export-date-fin");
-      if (elDebut) elDebut.value = lastYear.toISOString().split("T")[0];
-      if (elFin)   elFin.value   = today.toISOString().split("T")[0];
+      // Pas de filtre de date par défaut — exporte tout
+      // L'utilisateur peut restreindre manuellement si besoin
 
       openModal("modal-export");
     } catch (err) {
@@ -83,10 +76,11 @@ const ExportModule = (() => {
 
       // ── Filtrage des relevés ───────────────────────────────────────────────
       const releves_filtres = releves.filter(r => {
-        const date = r.date || "";
-        if (dateDebut && date < dateDebut) return false;
-        if (dateFin   && date > dateFin)   return false;
-        if (!sitesCochés.includes(r.bacId))  return false;
+        // Comparaison robuste : on extrait juste la date YYYY-MM-DD pour comparer
+        const dateStr = (r.date || "").substring(0, 10);
+        if (dateDebut && dateStr < dateDebut) return false;
+        if (dateFin   && dateStr > dateFin)   return false;
+        if (!sitesCochés.includes(r.bacId))   return false;
         return true;
       });
 
