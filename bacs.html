@@ -232,10 +232,11 @@
 <script src="js/export.js"></script>
 
 <script>
-  // Sur bacs.html, "voir sur la carte" redirige vers index.html
+  // Sur bacs.html, MapModule est un stub — pas de carte sur cette page.
+  // focusBac redirige vers index.html, refresh est no-op.
   const MapModule = {
-      focusBac: (id) => { window.location.href = `index.html?bac=${id}`; },
-      refresh:  ()   => Promise.resolve(),
+    focusBac: (id) => { window.location.href = `index.html?bac=${id}`; },
+    refresh:  ()   => Promise.resolve(),
   };
 
   initModalClose();
