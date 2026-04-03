@@ -28,7 +28,8 @@ const Forms = (() => {
 
   function _setupBacForm() {
     const form = document.getElementById("form-bac");
-    if (!form) return;
+    if (!form || form.dataset.initialized) return;
+    form.dataset.initialized = "1";   // Empêche double attachement
 
     form.addEventListener("submit", async e => {
       e.preventDefault();
@@ -54,10 +55,7 @@ const Forms = (() => {
         closeModal("modal-bac");
         form.reset();
         _editId = null;
-        // Rafraîchit uniquement le module de la page courante
-        if (typeof TableModule !== "undefined") await TableModule.refresh();
-        if (typeof MapModule   !== "undefined") await MapModule.refresh();
-        await _refreshSelectBacs();
+        await _refreshAll();
       } catch (err) {
         showToast("Erreur : " + err.message, "error");
       } finally {
@@ -113,7 +111,8 @@ const Forms = (() => {
 
   function _setupReleveForm() {
     const form = document.getElementById("form-releve");
-    if (!form) return;
+    if (!form || form.dataset.initialized) return;
+    form.dataset.initialized = "1";   // Empêche double attachement
 
     // Remplissage des <select> depuis la config Sheet
     _fillSelect("releve-bac",   _bacs.map(b => ({ value: b.id,    label: b.nom })));
@@ -137,11 +136,7 @@ const Forms = (() => {
         form.reset();
         _resetStars();
         _resetRanges();
-        // Rafraîchit uniquement les modules présents sur la page courante
-        const refreshes = [];
-        if (typeof MapModule   !== "undefined" && MapModule.refresh)   refreshes.push(MapModule.refresh());
-        if (typeof TableModule !== "undefined" && TableModule.refresh) refreshes.push(TableModule.refresh());
-        await Promise.all(refreshes);
+        await _refreshAll();
       } catch (err) {
         showToast("Erreur : " + err.message, "error");
       } finally {
@@ -211,6 +206,17 @@ const Forms = (() => {
           <span>${bac.nom}</span>
         </label>`).join("");
     }
+  }
+
+  /** Rafraîchit uniquement les modules présents sur la page courante */
+  async function _refreshAll() {
+    if (typeof TableModule !== "undefined" && typeof TableModule.refresh === "function") {
+      await TableModule.refresh();
+    }
+    if (typeof MapModule !== "undefined" && typeof MapModule.refresh === "function") {
+      await MapModule.refresh();
+    }
+    await _refreshSelectBacs();
   }
 
   function _fillSelect(id, options) {
