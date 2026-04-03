@@ -284,7 +284,7 @@ const TableModule = (() => {
   function _handleAction(e) {
     const { action, id } = e.currentTarget.dataset;
     switch (action) {
-      case "focus":  MapModule.focusBac(id);   break;
+      case "focus":  if (typeof MapModule !== 'undefined' && typeof MapModule.focusBac === 'function') MapModule.focusBac(id); break;
       case "releve": Forms.openReleveForm(id);  break;
       case "edit":   Forms.openEditBacForm(id); break;
       case "delete": _confirmDelete(id);        break;
@@ -299,7 +299,7 @@ const TableModule = (() => {
       showToast("Bac supprimé");
       _expanded.delete(id);
       await load();
-      await MapModule.refresh();
+      if (typeof MapModule !== 'undefined' && typeof MapModule.refresh === 'function') await MapModule.refresh();
     } catch (err) {
       showToast("Erreur : " + err.message, "error");
     }
