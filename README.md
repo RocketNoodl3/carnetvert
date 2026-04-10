@@ -160,3 +160,8 @@ const EMAILS_AUTORISES = [
 - GitHub Pages
 - Leaflet / OpenStreetMap
 - Chart.js + SheetJS
+
+## Scaling en cours
+- Supabase
+- Python FastAPI
+- Vercel
